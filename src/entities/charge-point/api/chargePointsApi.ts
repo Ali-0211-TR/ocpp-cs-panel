@@ -15,16 +15,14 @@ import type {
   DataTransferRequest,
   DataTransferResponse,
   ConnectorDto,
-  PaginatedResponse
 } from '@shared/api';
-import type { ChargePointListParams } from './queries';
 
 const BASE = '/charge-points';
 
 export const chargePointsApi = {
   // CRUD operations
-  list: (params?: ChargePointListParams) => 
-    api.get<PaginatedResponse<ChargePointDto>>(BASE, params as Record<string, unknown>),
+  list: () => 
+    api.get<ChargePointDto[]>(BASE),
 
   get: (id: string) => 
     api.get<ChargePointDto>(`${BASE}/${id}`),

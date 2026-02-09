@@ -1,6 +1,9 @@
+import { useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { chargePointsApi } from './chargePointsApi';
 import type {
+  ChargePointDto,
+  PaginatedResponse,
   ResetRequest,
   RemoteStartRequest,
   RemoteStopRequest,
@@ -16,7 +19,7 @@ import { toast } from '@shared/ui';
 export const chargePointKeys = {
   all: ['charge-points'] as const,
   lists: () => [...chargePointKeys.all, 'list'] as const,
-  list: (params?: ChargePointListParams) => [...chargePointKeys.lists(), params] as const,
+  list: () => [...chargePointKeys.lists(), 'all'] as const,
   details: () => [...chargePointKeys.all, 'detail'] as const,
   detail: (id: string) => [...chargePointKeys.details(), id] as const,
   stats: () => [...chargePointKeys.all, 'stats'] as const,
@@ -34,11 +37,49 @@ export interface ChargePointListParams {
 
 // Queries
 export function useChargePoints(params?: ChargePointListParams) {
-  return useQuery({
-    queryKey: chargePointKeys.list(params),
-    queryFn: () => chargePointsApi.list(params),
+  const { page = 1, limit = 20, search, status } = params || {};
+
+  const query = useQuery({
+    queryKey: chargePointKeys.list(),
+    queryFn: () => chargePointsApi.list(),
     staleTime: 30000,
   });
+
+  // Client-side filtering and pagination
+  const data = useMemo((): PaginatedResponse<ChargePointDto> | undefined => {
+    const allItems = query.data;
+    if (!allItems) return undefined;
+
+    let filtered = allItems;
+
+    // Search filter
+    if (search) {
+      const q = search.toLowerCase();
+      filtered = filtered.filter((cp) =>
+        cp.id.toLowerCase().includes(q) ||
+        cp.vendor?.toLowerCase().includes(q) ||
+        cp.model?.toLowerCase().includes(q)
+      );
+    }
+
+    // Status filter
+    if (status) {
+      filtered = filtered.filter((cp) => {
+        if (status === 'ONLINE') return cp.is_online;
+        if (status === 'OFFLINE') return !cp.is_online;
+        return cp.status === status;
+      });
+    }
+
+    const total = filtered.length;
+    const total_pages = Math.max(1, Math.ceil(total / limit));
+    const start = (page - 1) * limit;
+    const items = filtered.slice(start, start + limit);
+
+    return { items, total, page, limit, total_pages };
+  }, [query.data, page, limit, search, status]);
+
+  return { ...query, data };
 }
 
 export function useChargePoint(id: string) {

@@ -17,9 +17,6 @@ interface UseWebSocketOptions {
 export function useWebSocket(options: UseWebSocketOptions = {}) {
   const { enabled = true, chargePointId, eventTypes, onEvent } = options;
   const wsRef = useRef<WebSocket | null>(null);
-  const reconnectAttempts = useRef(0);
-  const reconnectTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isConnectingRef = useRef(false);
   
   const queryClient = useQueryClient();
   
@@ -114,67 +111,71 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
     }
   }, [queryClient, addEvent]);
 
+  // Store handleEvent in a ref so the WS effect doesn't re-run when it changes
+  const handleEventRef = useRef(handleEvent);
+  useEffect(() => {
+    handleEventRef.current = handleEvent;
+  }, [handleEvent]);
+
   // Connect to WebSocket
   useEffect(() => {
     // Don't connect if not enabled (e.g., not authenticated yet)
     if (!enabled) return;
 
-    // Prevent multiple connection attempts
-    if (isConnectingRef.current || wsRef.current?.readyState === WebSocket.OPEN) {
-      return;
-    }
+    let cancelled = false;
+    let ws: WebSocket | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let attempts = 0;
 
     const connect = () => {
-      if (wsRef.current?.readyState === WebSocket.OPEN || isConnectingRef.current) {
-        return;
-      }
+      if (cancelled) return;
 
-      isConnectingRef.current = true;
       setStatus('connecting');
       
       try {
-        const ws = new WebSocket(wsUrl);
+        ws = new WebSocket(wsUrl);
         wsRef.current = ws;
 
         ws.onopen = () => {
-          isConnectingRef.current = false;
+          if (cancelled) { ws?.close(); return; }
           setStatus('connected');
-          reconnectAttempts.current = 0;
+          attempts = 0;
           console.log('WebSocket connected');
         };
 
         ws.onmessage = (message) => {
+          if (cancelled) return;
           try {
             const event: WsEvent = JSON.parse(message.data);
-            handleEvent(event);
+            handleEventRef.current(event);
           } catch (error) {
             console.error('Failed to parse WebSocket message:', error);
           }
         };
 
         ws.onerror = (error) => {
+          if (cancelled) return;
           console.error('WebSocket error:', error);
-          isConnectingRef.current = false;
           setStatus('error');
         };
 
         ws.onclose = () => {
-          isConnectingRef.current = false;
+          if (cancelled) return;
           setStatus('disconnected');
           wsRef.current = null;
+          ws = null;
 
           // Attempt reconnection
-          if (reconnectAttempts.current < WS_MAX_RECONNECT_ATTEMPTS) {
-            reconnectAttempts.current++;
-            console.log(`WebSocket reconnecting... (attempt ${reconnectAttempts.current})`);
-            reconnectTimeout.current = setTimeout(connect, WS_RECONNECT_INTERVAL);
+          if (attempts < WS_MAX_RECONNECT_ATTEMPTS) {
+            attempts++;
+            console.log(`WebSocket reconnecting... (attempt ${attempts})`);
+            reconnectTimer = setTimeout(connect, WS_RECONNECT_INTERVAL);
           } else {
             console.log('WebSocket max reconnection attempts reached');
           }
         };
       } catch (error) {
         console.error('Failed to create WebSocket:', error);
-        isConnectingRef.current = false;
         setStatus('error');
       }
     };
@@ -183,26 +184,28 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
 
     // Cleanup on unmount
     return () => {
-      if (reconnectTimeout.current) {
-        clearTimeout(reconnectTimeout.current);
-        reconnectTimeout.current = null;
+      cancelled = true;
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
       }
-      reconnectAttempts.current = WS_MAX_RECONNECT_ATTEMPTS; // Prevent auto-reconnect
-      if (wsRef.current) {
-        wsRef.current.close();
-        wsRef.current = null;
+      if (ws) {
+        ws.onopen = null;
+        ws.onmessage = null;
+        ws.onerror = null;
+        ws.onclose = null;
+        ws.close();
+        ws = null;
       }
+      wsRef.current = null;
     };
-  }, [enabled, wsUrl, setStatus, handleEvent]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, wsUrl]);
 
   // Manual controls
   const disconnect = useCallback(() => {
-    if (reconnectTimeout.current) {
-      clearTimeout(reconnectTimeout.current);
-      reconnectTimeout.current = null;
-    }
-    reconnectAttempts.current = WS_MAX_RECONNECT_ATTEMPTS;
     if (wsRef.current) {
+      wsRef.current.onclose = null; // Prevent reconnection
       wsRef.current.close();
       wsRef.current = null;
     }
@@ -211,8 +214,7 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
 
   const reconnect = useCallback(() => {
     disconnect();
-    reconnectAttempts.current = 0;
-    // The effect will handle reconnection
+    // Re-enabling will be handled by the effect when enabled stays true
   }, [disconnect]);
 
   return {
