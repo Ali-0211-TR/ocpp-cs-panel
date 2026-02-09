@@ -370,12 +370,14 @@ export interface WsEvent {
 export type WsEventType =
   | 'charge_point_connected'
   | 'charge_point_disconnected'
+  | 'charge_point_status_changed'
   | 'boot_notification'
   | 'heartbeat_received'
   | 'connector_status_changed'
   | 'transaction_started'
   | 'transaction_stopped'
   | 'meter_values'
+  | 'meter_values_received'
   | 'authorization_result'
   | 'error';
 

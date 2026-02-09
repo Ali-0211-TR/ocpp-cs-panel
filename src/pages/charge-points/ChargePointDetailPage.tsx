@@ -1,8 +1,8 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { useChargePoint, useChargePointConnectors, ConnectorStatus } from '@entities/charge-point';
-import { useTransactions, TransactionRow } from '@entities/transaction';
+import { useChargePoint, useChargePointConnectors } from '@entities/charge-point';
+import { useTransactions, useActiveTransactions, TransactionRow } from '@entities/transaction';
 import { PageHeader } from '@widgets/layout';
-import { ConfigurationTab, CommandsTab } from '@/components/charge-points';
+import { ConfigurationTab, CommandsTab, ConnectorActionCard } from '@/components/charge-points';
 import type { TransactionDto, ConnectorDto } from '@shared/api';
 import {
   Card,
@@ -25,17 +25,19 @@ import {
 } from '@shared/ui';
 import { CHARGE_POINT_STATUSES } from '@shared/config';
 import { formatDate } from '@shared/lib';
-import { 
-  ArrowLeft, 
-  RefreshCw, 
+import {
+  ArrowLeft,
+  RefreshCw,
   Zap,
-  MapPin,
   Clock,
   Cpu,
   Activity,
   Settings,
   Terminal,
-  FileText
+  FileText,
+  Plug,
+  Wifi,
+  WifiOff,
 } from 'lucide-react';
 
 export function ChargePointDetailPage() {
@@ -44,6 +46,7 @@ export function ChargePointDetailPage() {
 
   const { data: chargePoint, isLoading: cpLoading, refetch } = useChargePoint(id!);
   const { data: connectors, isLoading: connectorsLoading } = useChargePointConnectors(id!);
+  const { data: activeTransactions } = useActiveTransactions(id!);
   const { data: transactionsData, isLoading: txLoading } = useTransactions({
     charge_point_id: id,
     page: 1,
@@ -52,6 +55,13 @@ export function ChargePointDetailPage() {
 
   const transactions: TransactionDto[] = transactionsData?.items || [];
   const connectorsList: ConnectorDto[] = connectors || chargePoint?.connectors || [];
+  const activeTransactionsList: TransactionDto[] = Array.isArray(activeTransactions) ? activeTransactions : [];
+
+  // Map active transactions to their connector IDs for quick lookup
+  const activeTransactionByConnector = new Map<number, TransactionDto>();
+  activeTransactionsList.forEach((tx) => {
+    activeTransactionByConnector.set(tx.connector_id, tx);
+  });
 
   if (cpLoading) {
     return (
@@ -74,6 +84,7 @@ export function ChargePointDetailPage() {
 
   const statusKey = chargePoint.is_online ? 'ONLINE' : 'OFFLINE';
   const statusConfig = CHARGE_POINT_STATUSES[statusKey];
+  const chargingCount = activeTransactionsList.length;
 
   return (
     <div className="space-y-6">
@@ -96,115 +107,112 @@ export function ChargePointDetailPage() {
         }
       />
 
-      {/* Status and Info */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between">
-              <span>Информация о станции</span>
-              <Badge variant={statusConfig.variant}>{statusConfig.label}</Badge>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-primary/10">
-                  <Zap className="h-4 w-4 text-primary" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">ID станции</p>
-                  <p className="font-medium">{chargePoint.id}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-primary/10">
-                  <Cpu className="h-4 w-4 text-primary" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Модель</p>
-                  <p className="font-medium">{chargePoint.model || 'Не указана'}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-primary/10">
-                  <MapPin className="h-4 w-4 text-primary" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Производитель</p>
-                  <p className="font-medium">{chargePoint.vendor || 'Не указан'}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-primary/10">
-                  <Clock className="h-4 w-4 text-primary" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Последняя активность</p>
-                  <p className="font-medium">
-                    {chargePoint.last_heartbeat 
-                      ? formatDate(chargePoint.last_heartbeat)
-                      : 'Нет данных'}
-                  </p>
-                </div>
-              </div>
+      {/* ── Compact station info bar ─────────────────── */}
+      <Card>
+        <CardContent className="py-4">
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+            {/* Online badge */}
+            <Badge
+              variant={statusConfig.variant}
+              className="gap-1.5 text-sm px-3 py-1"
+            >
+              {chargePoint.is_online ? (
+                <Wifi className="h-3.5 w-3.5" />
+              ) : (
+                <WifiOff className="h-3.5 w-3.5" />
+              )}
+              {statusConfig.label}
+            </Badge>
+
+            <Separator orientation="vertical" className="h-6 hidden sm:block" />
+
+            {/* Quick info items */}
+            <div className="flex items-center gap-2 text-sm">
+              <Cpu className="h-4 w-4 text-muted-foreground" />
+              <span className="text-muted-foreground">Модель:</span>
+              <span className="font-medium">{chargePoint.model || '—'}</span>
+            </div>
+            <div className="flex items-center gap-2 text-sm">
+              <Zap className="h-4 w-4 text-muted-foreground" />
+              <span className="text-muted-foreground">Производитель:</span>
+              <span className="font-medium">{chargePoint.vendor || '—'}</span>
+            </div>
+            <div className="flex items-center gap-2 text-sm">
+              <Clock className="h-4 w-4 text-muted-foreground" />
+              <span className="text-muted-foreground">Последний heartbeat:</span>
+              <span className="font-medium">
+                {chargePoint.last_heartbeat
+                  ? formatDate(chargePoint.last_heartbeat)
+                  : '—'}
+              </span>
             </div>
 
-            <Separator />
+            {chargingCount > 0 && (
+              <>
+                <Separator orientation="vertical" className="h-6 hidden sm:block" />
+                <Badge variant="info" className="gap-1 animate-pulse">
+                  <Zap className="h-3 w-3" />
+                  {chargingCount} активн. {chargingCount === 1 ? 'сессия' : 'сессий'}
+                </Badge>
+              </>
+            )}
 
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <p className="text-muted-foreground">Серийный номер</p>
-                <p>{chargePoint.serial_number || 'Нет данных'}</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground">Версия прошивки</p>
-                <p>{chargePoint.firmware_version || 'Нет данных'}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Connectors */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Коннекторы</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {connectorsLoading ? (
-              <div className="flex items-center justify-center h-32">
-                <Spinner />
-              </div>
-            ) : !connectors || connectors.length === 0 ? (
-              <p className="text-muted-foreground text-center py-8">
-                Нет коннекторов
-              </p>
-            ) : (
-              <div className="space-y-3">
-                {connectorsList.map((connector) => (
-                  <div
-                    key={connector.id}
-                    className="p-3 rounded-lg border bg-card"
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="font-medium">
-                        Коннектор #{connector.id}
-                      </span>
-                      <ConnectorStatus status={connector.status} />
-                    </div>
-                    {connector.error_code && connector.error_code !== 'NoError' && (
-                      <p className="text-sm text-destructive">
-                        {connector.error_code}
-                      </p>
-                    )}
-                  </div>
-                ))}
+            {chargePoint.serial_number && (
+              <div className="flex items-center gap-2 text-sm">
+                <span className="text-muted-foreground">S/N:</span>
+                <span className="font-mono text-xs">{chargePoint.serial_number}</span>
               </div>
             )}
-          </CardContent>
-        </Card>
+            {chargePoint.firmware_version && (
+              <div className="flex items-center gap-2 text-sm">
+                <span className="text-muted-foreground">FW:</span>
+                <span className="font-mono text-xs">{chargePoint.firmware_version}</span>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ── Connectors — Primary section ─────────────── */}
+      <div>
+        <div className="flex items-center gap-2 mb-4">
+          <Plug className="h-5 w-5 text-primary" />
+          <h2 className="text-lg font-semibold">Коннекторы</h2>
+          <Badge variant="outline" className="ml-1">
+            {connectorsList.length}
+          </Badge>
+        </div>
+
+        {connectorsLoading ? (
+          <div className="flex items-center justify-center h-32">
+            <Spinner />
+          </div>
+        ) : connectorsList.length === 0 ? (
+          <Card>
+            <CardContent className="text-center py-12 text-muted-foreground">
+              <Plug className="h-10 w-10 mx-auto mb-3 opacity-40" />
+              <p>Нет данных о коннекторах</p>
+              <p className="text-sm">Коннекторы появятся после первого подключения станции</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {connectorsList
+              .filter((c) => c.id > 0)
+              .map((connector) => (
+                <ConnectorActionCard
+                  key={connector.id}
+                  chargePointId={id!}
+                  connector={connector}
+                  isOnline={chargePoint.is_online}
+                  activeTransaction={activeTransactionByConnector.get(connector.id)}
+                />
+              ))}
+          </div>
+        )}
       </div>
 
-      {/* Tabs */}
+      {/* ── Tabs ─────────────────────────────────────── */}
       <Tabs defaultValue="transactions">
         <TabsList>
           <TabsTrigger value="transactions" className="gap-2">
@@ -217,7 +225,7 @@ export function ChargePointDetailPage() {
           </TabsTrigger>
           <TabsTrigger value="commands" className="gap-2">
             <Terminal className="h-4 w-4" />
-            Команды
+            Доп. команды
           </TabsTrigger>
           <TabsTrigger value="monitoring" className="gap-2">
             <Activity className="h-4 w-4" />
@@ -268,8 +276,8 @@ export function ChargePointDetailPage() {
         </TabsContent>
 
         <TabsContent value="commands" className="mt-4">
-          <CommandsTab 
-            chargePointId={id!} 
+          <CommandsTab
+            chargePointId={id!}
             connectors={connectorsList}
             isOnline={chargePoint.is_online}
           />

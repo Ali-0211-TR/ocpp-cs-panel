@@ -86,18 +86,20 @@ export const TRIGGER_MESSAGE_TYPES = [
 ] as const;
 
 // WebSocket Event Types
-export const WS_EVENT_TYPES = {
+export const WS_EVENT_TYPES: Record<string, { label: string; color: string }> = {
   charge_point_connected: { label: 'Станция подключена', color: 'emerald' },
   charge_point_disconnected: { label: 'Станция отключена', color: 'red' },
+  charge_point_status_changed: { label: 'Статус станции', color: 'amber' },
   boot_notification: { label: 'Загрузка станции', color: 'blue' },
   heartbeat_received: { label: 'Heartbeat', color: 'slate' },
   connector_status_changed: { label: 'Статус коннектора', color: 'amber' },
   transaction_started: { label: 'Транзакция началась', color: 'emerald' },
   transaction_stopped: { label: 'Транзакция завершена', color: 'blue' },
   meter_values: { label: 'Показания счётчика', color: 'slate' },
+  meter_values_received: { label: 'Показания счётчика', color: 'slate' },
   authorization_result: { label: 'Авторизация', color: 'violet' },
   error: { label: 'Ошибка', color: 'red' },
-} as const;
+};
 
 // Currency
 export const DEFAULT_CURRENCY = 'UZS';

@@ -254,14 +254,14 @@ export function CommandsTab({ chargePointId, connectors, isOnline }: CommandsTab
                 <div className="space-y-2">
                   <Label>Коннектор (опционально)</Label>
                   <Select 
-                    value={selectedConnector?.toString() || ''} 
-                    onValueChange={(v) => setSelectedConnector(v ? parseInt(v) : undefined)}
+                    value={selectedConnector?.toString() || '__any__'} 
+                    onValueChange={(v) => setSelectedConnector(v === '__any__' ? undefined : parseInt(v))}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Любой свободный" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Любой свободный</SelectItem>
+                      <SelectItem value="__any__">Любой свободный</SelectItem>
                       {connectors.map((c) => (
                         <SelectItem key={c.id} value={c.id.toString()}>
                           Коннектор #{c.id}
@@ -309,7 +309,7 @@ export function CommandsTab({ chargePointId, connectors, isOnline }: CommandsTab
                     </SelectTrigger>
                     <SelectContent>
                       {transactions.length === 0 ? (
-                        <SelectItem value="" disabled>Нет активных транзакций</SelectItem>
+                        <SelectItem value="__empty__" disabled>Нет активных транзакций</SelectItem>
                       ) : (
                         transactions.map((tx) => (
                           <SelectItem key={tx.id} value={tx.id.toString()}>
@@ -517,14 +517,14 @@ export function CommandsTab({ chargePointId, connectors, isOnline }: CommandsTab
                 <div className="space-y-2">
                   <Label>Коннектор (опционально)</Label>
                   <Select 
-                    value={selectedConnector?.toString() || ''} 
-                    onValueChange={(v) => setSelectedConnector(v ? parseInt(v) : undefined)}
+                    value={selectedConnector?.toString() || '__none__'} 
+                    onValueChange={(v) => setSelectedConnector(v === '__none__' ? undefined : parseInt(v))}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Не указан" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Не указан</SelectItem>
+                      <SelectItem value="__none__">Не указан</SelectItem>
                       {connectors.map((c) => (
                         <SelectItem key={c.id} value={c.id.toString()}>
                           Коннектор #{c.id}

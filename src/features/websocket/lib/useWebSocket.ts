@@ -6,6 +6,7 @@ import type { WsEvent, WsEventType } from '@shared/api';
 import { chargePointKeys } from '@entities/charge-point';
 import { transactionKeys } from '@entities/transaction';
 import { monitoringKeys } from '@entities/monitoring';
+import { toast } from 'sonner';
 
 interface UseWebSocketOptions {
   enabled?: boolean;
@@ -14,12 +15,53 @@ interface UseWebSocketOptions {
   onEvent?: (event: WsEvent) => void;
 }
 
+/**
+ * Convert PascalCase to snake_case.
+ * e.g. "TransactionStopped" → "transaction_stopped"
+ */
+function toSnakeCase(str: string): string {
+  return str
+    .replace(/([A-Z])/g, '_$1')
+    .toLowerCase()
+    .replace(/^_/, '');
+}
+
+/**
+ * Transform a raw backend WebSocket message into the frontend WsEvent format.
+ *
+ * Backend sends (Rust serde tagged enum):
+ *   { id, timestamp, type: "TransactionStopped", data: { charge_point_id, ... } }
+ *
+ * Frontend expects:
+ *   { id, timestamp, event_type: "transaction_stopped", charge_point_id, data: { ... } }
+ */
+function parseWsMessage(raw: unknown): WsEvent | null {
+  if (typeof raw !== 'object' || raw === null) return null;
+  const msg = raw as Record<string, unknown>;
+
+  // Skip the welcome/system message from the server
+  const type = msg.type as string | undefined;
+  if (!type || type === 'connected') return null;
+
+  const eventType = toSnakeCase(type) as WsEventType;
+  const data = (msg.data || {}) as Record<string, unknown>;
+  const chargePointId = (data.charge_point_id || '') as string;
+
+  return {
+    id: (msg.id || '') as string,
+    timestamp: (msg.timestamp || new Date().toISOString()) as string,
+    event_type: eventType,
+    charge_point_id: chargePointId,
+    data,
+  };
+}
+
 export function useWebSocket(options: UseWebSocketOptions = {}) {
   const { enabled = true, chargePointId, eventTypes, onEvent } = options;
   const wsRef = useRef<WebSocket | null>(null);
-  
+
   const queryClient = useQueryClient();
-  
+
   // Get stable references from store
   const setStatus = useWebSocketStore((state) => state.setStatus);
   const addEvent = useWebSocketStore((state) => state.addEvent);
@@ -51,10 +93,20 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
     addEvent(event);
     onEventRef.current?.(event);
 
+    const cpId = event.charge_point_id;
+
     // Update React Query cache based on event type
     switch (event.event_type) {
       case 'charge_point_connected':
       case 'charge_point_disconnected':
+        queryClient.invalidateQueries({ queryKey: chargePointKeys.all });
+        queryClient.invalidateQueries({ queryKey: monitoringKeys.all });
+        if (event.event_type === 'charge_point_disconnected') {
+          toast.warning(`Станция ${cpId} отключилась`);
+        }
+        break;
+
+      case 'charge_point_status_changed':
         queryClient.invalidateQueries({ queryKey: chargePointKeys.all });
         queryClient.invalidateQueries({ queryKey: monitoringKeys.all });
         break;
@@ -64,49 +116,92 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
         break;
 
       case 'heartbeat_received':
-        queryClient.invalidateQueries({ 
-          queryKey: chargePointKeys.detail(event.charge_point_id) 
+        queryClient.invalidateQueries({
+          queryKey: chargePointKeys.detail(cpId),
         });
         queryClient.invalidateQueries({ queryKey: monitoringKeys.heartbeats() });
         break;
 
       case 'connector_status_changed':
-        queryClient.invalidateQueries({ 
-          queryKey: chargePointKeys.detail(event.charge_point_id) 
+        queryClient.invalidateQueries({
+          queryKey: chargePointKeys.detail(cpId),
+        });
+        queryClient.invalidateQueries({
+          queryKey: chargePointKeys.connectors(cpId),
         });
         queryClient.invalidateQueries({ queryKey: chargePointKeys.list() });
         break;
 
-      case 'transaction_started':
+      case 'transaction_started': {
         queryClient.invalidateQueries({ queryKey: transactionKeys.all });
-        queryClient.invalidateQueries({ 
-          queryKey: chargePointKeys.detail(event.charge_point_id) 
+        queryClient.invalidateQueries({
+          queryKey: chargePointKeys.detail(cpId),
+        });
+        queryClient.invalidateQueries({
+          queryKey: chargePointKeys.connectors(cpId),
         });
         queryClient.invalidateQueries({ queryKey: monitoringKeys.stats() });
-        break;
 
-      case 'transaction_stopped':
+        const startData = event.data as { connector_id?: number; id_tag?: string; transaction_id?: number };
+        toast.info(
+          `⚡ Зарядка начата на ${cpId}, коннектор #${startData.connector_id ?? '?'}` +
+          (startData.transaction_id ? ` (транзакция #${startData.transaction_id})` : ''),
+        );
+        break;
+      }
+
+      case 'transaction_stopped': {
         queryClient.invalidateQueries({ queryKey: transactionKeys.all });
-        queryClient.invalidateQueries({ 
-          queryKey: chargePointKeys.detail(event.charge_point_id) 
+        queryClient.invalidateQueries({
+          queryKey: chargePointKeys.detail(cpId),
+        });
+        queryClient.invalidateQueries({
+          queryKey: chargePointKeys.connectors(cpId),
         });
         queryClient.invalidateQueries({ queryKey: monitoringKeys.stats() });
+
+        const stopData = event.data as {
+          transaction_id?: number;
+          energy_consumed_kwh?: number;
+          total_cost?: number;
+          currency?: string;
+          reason?: string;
+        };
+        const energy = stopData.energy_consumed_kwh?.toFixed(2) ?? '?';
+        const cost = stopData.total_cost != null ? stopData.total_cost.toFixed(0) : '?';
+        const curr = stopData.currency || 'UZS';
+        const reason = stopData.reason ? ` (${stopData.reason})` : '';
+        toast.info(
+          `🔌 Зарядка завершена на ${cpId}` +
+          (stopData.transaction_id ? `, транзакция #${stopData.transaction_id}` : '') +
+          `: ${energy} кВт·ч, ${cost} ${curr}${reason}`,
+        );
         break;
+      }
 
       case 'meter_values':
-        const txData = event.data as { transaction_id?: number };
-        if (txData.transaction_id) {
-          queryClient.invalidateQueries({ 
-            queryKey: transactionKeys.detail(txData.transaction_id) 
+      case 'meter_values_received': {
+        const mvData = event.data as { transaction_id?: number; connector_id?: number };
+        if (mvData.transaction_id) {
+          queryClient.invalidateQueries({
+            queryKey: transactionKeys.detail(mvData.transaction_id),
+          });
+        }
+        // Also invalidate active transactions so ConnectorActionCard shows updated energy
+        if (cpId) {
+          queryClient.invalidateQueries({
+            queryKey: transactionKeys.activeByChargePoint(cpId),
           });
         }
         break;
+      }
 
       case 'authorization_result':
         break;
 
       case 'error':
         console.error('WebSocket error event:', event.data);
+        toast.error(`Ошибка станции ${cpId}: ${(event.data as { message?: string }).message || 'Неизвестная ошибка'}`);
         break;
     }
   }, [queryClient, addEvent]);
@@ -131,7 +226,7 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
       if (cancelled) return;
 
       setStatus('connecting');
-      
+
       try {
         ws = new WebSocket(wsUrl);
         wsRef.current = ws;
@@ -146,8 +241,11 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
         ws.onmessage = (message) => {
           if (cancelled) return;
           try {
-            const event: WsEvent = JSON.parse(message.data);
-            handleEventRef.current(event);
+            const raw = JSON.parse(message.data);
+            const event = parseWsMessage(raw);
+            if (event) {
+              handleEventRef.current(event);
+            }
           } catch (error) {
             console.error('Failed to parse WebSocket message:', error);
           }
