@@ -1,1 +1,1 @@
-export { IdTagsPage } from './ui/IdTagsPage';
+export { IdTagsPage } from './IdTagsPage';

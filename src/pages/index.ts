@@ -1,0 +1,10 @@
+export { LoginPage } from './login';
+export { DashboardPage } from './dashboard';
+export { ChargePointsPage, ChargePointDetailPage } from './charge-points';
+export { TransactionsPage } from './transactions';
+export { IdTagsPage } from './id-tags';
+export { TariffsPage } from './tariffs';
+export { ApiKeysPage } from './api-keys';
+export { SettingsPage } from './settings';
+export { ReportsPage } from './reports';
+export { NotFoundPage } from './not-found';

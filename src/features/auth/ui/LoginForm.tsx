@@ -1,61 +1,101 @@
-import { useState } from 'react';
-import type { FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useMutation } from '@tanstack/react-query';
-import { sessionApi } from '@entities/session';
-import type { LoginRequest } from '@entities/session';
-import { useAuthStore } from '../model/auth.store';
-import { Button, Input } from '@shared/ui';
-import toast from 'react-hot-toast';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
+import { 
+  Card, 
+  CardContent, 
+  CardDescription, 
+  CardHeader, 
+  CardTitle,
+  Button,
+  Input,
+  Label,
+  Spinner
+} from '@shared/ui';
+import { useLogin } from '../lib/useAuth';
 
-export function LoginForm() {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const setAuth = useAuthStore((s) => s.setAuth);
-  const navigate = useNavigate();
+const loginSchema = z.object({
+  username: z.string().min(1, 'Введите имя пользователя или email'),
+  password: z.string().min(1, 'Введите пароль'),
+});
 
-  const loginMutation = useMutation({
-    mutationFn: (data: LoginRequest) => sessionApi.login(data),
-    onSuccess: (data) => {
-      if (!data.access_token) {
-        toast.error('Login failed: no token received');
-        console.error('[auth] login response missing access_token:', data);
-        return;
-      }
-      setAuth(data.access_token, data.user);
-      toast.success('Logged in successfully');
-      navigate('/', { replace: true });
-    },
-    onError: () => {
-      toast.error('Invalid credentials');
-    },
+type LoginFormData = z.infer<typeof loginSchema>;
+
+interface LoginFormProps {
+  onSuccess?: () => void;
+}
+
+export function LoginForm({ onSuccess }: LoginFormProps) {
+  const { mutate: login, isPending } = useLogin();
+  
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<LoginFormData>({
+    resolver: zodResolver(loginSchema),
   });
 
-  const handleSubmit = (e: FormEvent) => {
-    e.preventDefault();
-    loginMutation.mutate({ username, password });
+  const onSubmit = (data: LoginFormData) => {
+    login(data, {
+      onSuccess: () => {
+        onSuccess?.();
+      },
+    });
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4 w-full max-w-sm">
-      <Input
-        label="Username"
-        value={username}
-        onChange={(e) => setUsername(e.target.value)}
-        required
-        autoComplete="username"
-      />
-      <Input
-        label="Password"
-        type="password"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-        required
-        autoComplete="current-password"
-      />
-      <Button type="submit" className="w-full" loading={loginMutation.isPending}>
-        Sign In
-      </Button>
-    </form>
+    <Card className="w-full max-w-md">
+      <CardHeader className="space-y-1">
+        <CardTitle className="text-2xl font-bold text-center">
+          Вход в систему
+        </CardTitle>
+        <CardDescription className="text-center">
+          OCPP Central System
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="username">Имя пользователя или Email</Label>
+            <Input
+              id="username"
+              type="text"
+              placeholder="admin"
+              autoComplete="username"
+              {...register('username')}
+            />
+            {errors.username && (
+              <p className="text-sm text-red-500">{errors.username.message}</p>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="password">Пароль</Label>
+            <Input
+              id="password"
+              type="password"
+              placeholder="••••••••"
+              autoComplete="current-password"
+              {...register('password')}
+            />
+            {errors.password && (
+              <p className="text-sm text-red-500">{errors.password.message}</p>
+            )}
+          </div>
+
+          <Button type="submit" className="w-full" disabled={isPending}>
+            {isPending ? (
+              <>
+                <Spinner size="sm" />
+                <span>Вход...</span>
+              </>
+            ) : (
+              'Войти'
+            )}
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
   );
 }

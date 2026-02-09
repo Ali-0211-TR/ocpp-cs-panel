@@ -1,47 +1,106 @@
-import type React from 'react';
-import { Badge, Card } from '@shared/ui';
-import { formatDate } from '@shared/lib';
-import type { ChargePointDto } from '../model/types';
-import { Wifi, WifiOff, Plug } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Card, CardContent, CardHeader, CardTitle, Badge, Button } from '@shared/ui';
+import { cn, timeAgo } from '@shared/lib';
+import { ChevronRight, Wifi, WifiOff, Settings, Power } from 'lucide-react';
+import { ConnectorIndicator } from './ConnectorStatus';
+import type { ChargePointDto } from '@shared/api';
 
-interface Props {
+interface ChargePointCardProps {
   chargePoint: ChargePointDto;
-  onClick?: () => void;
+  onCommand?: (chargePointId: string, command: string) => void;
+  className?: string;
 }
 
-export const ChargePointCard: React.FC<Props> = ({ chargePoint: cp, onClick }) => (
-  <div className="cursor-pointer hover:shadow-md transition-shadow" onClick={onClick} role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && onClick?.()}>
-  <Card>
-    <div className="flex items-start justify-between mb-3">
-      <div className="flex items-center gap-2">
-        {cp.is_online ? (
-          <Wifi className="text-green-500" size={18} />
-        ) : (
-          <WifiOff className="text-gray-400" size={18} />
-        )}
-        <h3 className="font-semibold text-gray-900">{cp.id}</h3>
-      </div>
-      <Badge variant={cp.is_online ? 'green' : 'red'}>{cp.is_online ? 'Online' : 'Offline'}</Badge>
-    </div>
-    <div className="space-y-1 text-sm text-gray-600">
-      {cp.vendor && <p>Vendor: {cp.vendor}</p>}
-      {cp.model && <p>Model: {cp.model}</p>}
-      <p>Connectors: {cp.connectors.length}</p>
-      <p>Registered: {formatDate(cp.registered_at)}</p>
-    </div>
-    {cp.connectors.length > 0 && (
-      <div className="flex gap-2 mt-3 flex-wrap">
-        {cp.connectors.map((c) => (
-          <div key={c.id} className="flex items-center gap-1 text-xs bg-gray-100 px-2 py-1 rounded">
-            <Plug size={12} />
-            <span>#{c.id}</span>
-            <Badge variant={c.status === 'Available' ? 'green' : c.status === 'Charging' ? 'blue' : 'gray'} className="text-[10px]">
-              {c.status}
-            </Badge>
+export function ChargePointCard({ 
+  chargePoint, 
+  onCommand,
+  className 
+}: ChargePointCardProps) {
+  const { id, vendor, model, is_online, connectors, last_heartbeat } = chargePoint;
+
+  return (
+    <Card className={cn(
+      'transition-all hover:shadow-md',
+      !is_online && 'opacity-75',
+      className
+    )}>
+      <CardHeader className="pb-2">
+        <div className="flex items-start justify-between">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <CardTitle className="text-lg font-semibold">{id}</CardTitle>
+              <Badge variant={is_online ? 'success' : 'error'} className="gap-1">
+                {is_online ? (
+                  <>
+                    <Wifi className="h-3 w-3" />
+                    Онлайн
+                  </>
+                ) : (
+                  <>
+                    <WifiOff className="h-3 w-3" />
+                    Офлайн
+                  </>
+                )}
+              </Badge>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              {vendor && model ? `${vendor} ${model}` : 'Неизвестная модель'}
+            </p>
           </div>
-        ))}
-      </div>
-    )}
-  </Card>
-  </div>
-);
+          <Link to={`/charge-points/${id}`}>
+            <Button variant="ghost" size="icon">
+              <ChevronRight className="h-5 w-5" />
+            </Button>
+          </Link>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* Connectors */}
+        <div className="space-y-2">
+          <h4 className="text-sm font-medium text-muted-foreground">
+            Разъёмы ({connectors.length})
+          </h4>
+          <div className="grid gap-2">
+            {connectors.map((connector) => (
+              <ConnectorIndicator
+                key={connector.id}
+                connectorId={connector.id}
+                status={connector.status}
+                errorCode={connector.error_code}
+              />
+            ))}
+          </div>
+        </div>
+
+        {/* Last heartbeat */}
+        {last_heartbeat && (
+          <div className="text-xs text-muted-foreground">
+            Последний heartbeat: {timeAgo(last_heartbeat)}
+          </div>
+        )}
+
+        {/* Quick actions */}
+        {onCommand && is_online && (
+          <div className="flex gap-2 pt-2 border-t">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="flex-1"
+              onClick={() => onCommand(id, 'reset')}
+            >
+              <Power className="h-3 w-3 mr-1" />
+              Reset
+            </Button>
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={() => onCommand(id, 'configure')}
+            >
+              <Settings className="h-3 w-3" />
+            </Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}

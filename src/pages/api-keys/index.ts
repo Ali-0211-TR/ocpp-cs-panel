@@ -1,1 +1,1 @@
-export { ApiKeysPage } from './ui/ApiKeysPage';
+export { ApiKeysPage } from './ApiKeysPage';

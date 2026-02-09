@@ -1,2 +1,2 @@
-export { ChargePointsPage } from './ui/ChargePointsPage';
-export { ChargePointDetailPage } from './ui/ChargePointDetailPage';
+export { ChargePointsPage } from './ChargePointsPage';
+export { ChargePointDetailPage } from './ChargePointDetailPage';
