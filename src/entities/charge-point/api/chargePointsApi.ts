@@ -10,6 +10,10 @@ import type {
   ChangeAvailabilityRequest,
   TriggerMessageRequest,
   ConfigurationResponse,
+  ChangeConfigurationRequest,
+  LocalListVersionResponse,
+  DataTransferRequest,
+  DataTransferResponse,
   ConnectorDto,
   PaginatedResponse
 } from '@shared/api';
@@ -58,5 +62,17 @@ export const chargePointsApi = {
     api.post<CommandResponse>(`${BASE}/${chargePointId}/trigger-message`, data),
 
   getConfiguration: (chargePointId: string, keys?: string[]) => 
-    api.get<ConfigurationResponse>(`${BASE}/${chargePointId}/configuration`, { key: keys }),
+    api.get<ConfigurationResponse>(`${BASE}/${chargePointId}/configuration`, keys ? { keys: keys.join(',') } : undefined),
+
+  changeConfiguration: (chargePointId: string, data: ChangeConfigurationRequest) =>
+    api.put<CommandResponse>(`${BASE}/${chargePointId}/configuration`, data),
+
+  clearCache: (chargePointId: string) =>
+    api.post<CommandResponse>(`${BASE}/${chargePointId}/clear-cache`),
+
+  getLocalListVersion: (chargePointId: string) =>
+    api.get<LocalListVersionResponse>(`${BASE}/${chargePointId}/local-list-version`),
+
+  dataTransfer: (chargePointId: string, data: DataTransferRequest) =>
+    api.post<DataTransferResponse>(`${BASE}/${chargePointId}/data-transfer`, data),
 };

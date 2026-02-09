@@ -2,6 +2,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useChargePoint, useChargePointConnectors, ConnectorStatus } from '@entities/charge-point';
 import { useTransactions, TransactionRow } from '@entities/transaction';
 import { PageHeader } from '@widgets/layout';
+import { ConfigurationTab, CommandsTab } from '@/components/charge-points';
 import type { TransactionDto, ConnectorDto } from '@shared/api';
 import {
   Card,
@@ -27,12 +28,14 @@ import { formatDate } from '@shared/lib';
 import { 
   ArrowLeft, 
   RefreshCw, 
-  Settings, 
-  Power, 
   Zap,
   MapPin,
   Clock,
-  Cpu
+  Cpu,
+  Activity,
+  Settings,
+  Terminal,
+  FileText
 } from 'lucide-react';
 
 export function ChargePointDetailPage() {
@@ -48,6 +51,7 @@ export function ChargePointDetailPage() {
   });
 
   const transactions: TransactionDto[] = transactionsData?.items || [];
+  const connectorsList: ConnectorDto[] = connectors || chargePoint?.connectors || [];
 
   if (cpLoading) {
     return (
@@ -88,16 +92,6 @@ export function ChargePointDetailPage() {
             <Button variant="outline" size="icon" onClick={() => refetch()}>
               <RefreshCw className="h-4 w-4" />
             </Button>
-            <Button variant="outline">
-              <Settings className="h-4 w-4 mr-2" />
-              Настройки
-            </Button>
-            {chargePoint.is_online && (
-              <Button variant="destructive">
-                <Power className="h-4 w-4 mr-2" />
-                Перезагрузить
-              </Button>
-            )}
           </div>
         }
       />
@@ -157,9 +151,15 @@ export function ChargePointDetailPage() {
 
             <Separator />
 
-            <div>
-              <p className="text-sm text-muted-foreground mb-2">Серийный номер</p>
-              <p>{chargePoint.serial_number || 'Нет данных'}</p>
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <p className="text-muted-foreground">Серийный номер</p>
+                <p>{chargePoint.serial_number || 'Нет данных'}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Версия прошивки</p>
+                <p>{chargePoint.firmware_version || 'Нет данных'}</p>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -180,7 +180,7 @@ export function ChargePointDetailPage() {
               </p>
             ) : (
               <div className="space-y-3">
-                {(connectors as ConnectorDto[]).map((connector) => (
+                {connectorsList.map((connector) => (
                   <div
                     key={connector.id}
                     className="p-3 rounded-lg border bg-card"
@@ -191,9 +191,11 @@ export function ChargePointDetailPage() {
                       </span>
                       <ConnectorStatus status={connector.status} />
                     </div>
-                    <p className="text-sm text-muted-foreground">
-                      {connector.error_code || 'Нет ошибок'}
-                    </p>
+                    {connector.error_code && connector.error_code !== 'NoError' && (
+                      <p className="text-sm text-destructive">
+                        {connector.error_code}
+                      </p>
+                    )}
                   </div>
                 ))}
               </div>
@@ -202,12 +204,25 @@ export function ChargePointDetailPage() {
         </Card>
       </div>
 
-      {/* Tabs for Transactions, Events, etc. */}
+      {/* Tabs */}
       <Tabs defaultValue="transactions">
         <TabsList>
-          <TabsTrigger value="transactions">Транзакции</TabsTrigger>
-          <TabsTrigger value="events">События</TabsTrigger>
-          <TabsTrigger value="diagnostics">Диагностика</TabsTrigger>
+          <TabsTrigger value="transactions" className="gap-2">
+            <FileText className="h-4 w-4" />
+            Транзакции
+          </TabsTrigger>
+          <TabsTrigger value="configuration" className="gap-2">
+            <Settings className="h-4 w-4" />
+            Конфигурация
+          </TabsTrigger>
+          <TabsTrigger value="commands" className="gap-2">
+            <Terminal className="h-4 w-4" />
+            Команды
+          </TabsTrigger>
+          <TabsTrigger value="monitoring" className="gap-2">
+            <Activity className="h-4 w-4" />
+            Мониторинг
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="transactions" className="mt-4">
@@ -248,22 +263,27 @@ export function ChargePointDetailPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="events" className="mt-4">
-          <Card>
-            <CardContent className="pt-6">
-              <p className="text-muted-foreground text-center py-8">
-                История событий будет доступна в следующей версии
-              </p>
-            </CardContent>
-          </Card>
+        <TabsContent value="configuration" className="mt-4">
+          <ConfigurationTab chargePointId={id!} />
         </TabsContent>
 
-        <TabsContent value="diagnostics" className="mt-4">
+        <TabsContent value="commands" className="mt-4">
+          <CommandsTab 
+            chargePointId={id!} 
+            connectors={connectorsList}
+            isOnline={chargePoint.is_online}
+          />
+        </TabsContent>
+
+        <TabsContent value="monitoring" className="mt-4">
           <Card>
-            <CardContent className="pt-6">
-              <p className="text-muted-foreground text-center py-8">
-                Диагностика будет доступна в следующей версии
-              </p>
+            <CardHeader>
+              <CardTitle>Мониторинг в реальном времени</CardTitle>
+            </CardHeader>
+            <CardContent className="text-center py-8 text-muted-foreground">
+              <Activity className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>Live мониторинг MeterValues и Heartbeat</p>
+              <p className="text-sm">Подключение к WebSocket для получения данных...</p>
             </CardContent>
           </Card>
         </TabsContent>

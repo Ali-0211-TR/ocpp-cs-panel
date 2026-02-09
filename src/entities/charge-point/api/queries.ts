@@ -6,7 +6,9 @@ import type {
   RemoteStopRequest,
   UnlockConnectorRequest,
   ChangeAvailabilityRequest,
-  TriggerMessageRequest
+  TriggerMessageRequest,
+  ChangeConfigurationRequest,
+  DataTransferRequest
 } from '@shared/api';
 import { toast } from '@shared/ui';
 
@@ -184,6 +186,70 @@ export function useTriggerMessage() {
     },
     onError: (error: Error) => {
       toast.error(`Ошибка: ${error.message}`);
+    },
+  });
+}
+
+// New command hooks
+export function useChangeConfiguration() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ chargePointId, data }: { chargePointId: string; data: ChangeConfigurationRequest }) =>
+      chargePointsApi.changeConfiguration(chargePointId, data),
+    onSuccess: (response, variables) => {
+      queryClient.invalidateQueries({ queryKey: chargePointKeys.configuration(variables.chargePointId) });
+      if (response.status === 'RebootRequired') {
+        toast.warning(`Изменено. Требуется перезагрузка станции`);
+      } else if (response.status === 'Accepted') {
+        toast.success('Конфигурация успешно изменена');
+      } else {
+        toast.error(`Станция отклонила изменение: ${response.status}`);
+      }
+    },
+    onError: (error: Error) => {
+      toast.error(`Станция не поддерживает эту команду: ${error.message}`);
+    },
+  });
+}
+
+export function useClearCache() {
+  return useMutation({
+    mutationFn: (chargePointId: string) => chargePointsApi.clearCache(chargePointId),
+    onSuccess: (response) => {
+      if (response.status === 'Accepted') {
+        toast.success('Кэш авторизации очищен');
+      } else {
+        toast.error(`Станция отклонила: ${response.status}`);
+      }
+    },
+    onError: (error: Error) => {
+      toast.error(`Станция не поддерживает эту команду: ${error.message}`);
+    },
+  });
+}
+
+export function useLocalListVersion(chargePointId: string) {
+  return useQuery({
+    queryKey: [...chargePointKeys.all, 'local-list-version', chargePointId],
+    queryFn: () => chargePointsApi.getLocalListVersion(chargePointId),
+    enabled: false, // Manual trigger only
+  });
+}
+
+export function useDataTransfer() {
+  return useMutation({
+    mutationFn: ({ chargePointId, data }: { chargePointId: string; data: DataTransferRequest }) =>
+      chargePointsApi.dataTransfer(chargePointId, data),
+    onSuccess: (response) => {
+      if (response.status === 'Accepted') {
+        toast.success(`Data Transfer успешен${response.data ? `: ${response.data}` : ''}`);
+      } else {
+        toast.error(`Станция отклонила: ${response.status}`);
+      }
+    },
+    onError: (error: Error) => {
+      toast.error(`Станция не поддерживает эту команду: ${error.message}`);
     },
   });
 }

@@ -135,6 +135,26 @@ export interface ConfigurationResponse {
   unknown_keys: string[];
 }
 
+export interface ChangeConfigurationRequest {
+  key: string;
+  value: string;
+}
+
+export interface LocalListVersionResponse {
+  list_version: number;
+}
+
+export interface DataTransferRequest {
+  vendor_id: string;
+  message_id?: string;
+  data?: string;
+}
+
+export interface DataTransferResponse {
+  status: string;
+  data?: string;
+}
+
 // ============================================
 // IdTag Types
 // ============================================

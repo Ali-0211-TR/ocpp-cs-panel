@@ -1,6 +1,7 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { transactionsApi } from './transactionsApi';
 import type { TransactionListParams } from '@shared/api';
+import { toast } from '@shared/ui';
 
 // Query keys
 export const transactionKeys = {
@@ -62,5 +63,27 @@ export function useTransactionStats(chargePointId?: string) {
     queryKey: [...transactionKeys.stats(), chargePointId],
     queryFn: () => transactionsApi.getStats(chargePointId),
     staleTime: 30000,
+  });
+}
+
+// Mutations
+export function useForceStopTransaction() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (transactionId: number) => transactionsApi.forceStop(transactionId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: transactionKeys.all });
+      toast.success('Транзакция принудительно остановлена');
+    },
+    onError: (error: Error & { response?: { status: number } }) => {
+      if (error.response?.status === 404) {
+        toast.error('Транзакция не найдена');
+      } else if (error.response?.status === 409) {
+        toast.error('Транзакция уже завершена');
+      } else {
+        toast.error(`Ошибка: ${error.message}`);
+      }
+    },
   });
 }

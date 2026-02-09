@@ -37,4 +37,7 @@ export const transactionsApi = {
       total_energy_wh: 0,
     }));
   },
+
+  forceStop: (transactionId: number) =>
+    api.post<TransactionDto>(`${BASE}/${transactionId}/force-stop`),
 };

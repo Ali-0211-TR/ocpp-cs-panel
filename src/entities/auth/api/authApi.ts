@@ -20,5 +20,5 @@ export const authApi = {
     api.get<UserInfo>(`${AUTH_BASE}/me`),
 
   changePassword: (data: ChangePasswordRequest) => 
-    api.post<void>(`${AUTH_BASE}/change-password`, data),
+    api.put<void>(`${AUTH_BASE}/change-password`, data),
 };

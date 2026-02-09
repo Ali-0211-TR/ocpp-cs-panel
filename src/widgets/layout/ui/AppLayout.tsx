@@ -10,11 +10,11 @@ import { Header } from './Header';
 
 export function AppLayout() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const { isAuthenticated, isLoading, token, setUser, setLoading } = useAuthStore();
+  const { isAuthenticated, isLoading, token, setUser, setLoading, logout } = useAuthStore();
   const location = useLocation();
 
-  // Connect to WebSocket
-  useWebSocket();
+  // Connect to WebSocket only when authenticated
+  useWebSocket({ enabled: isAuthenticated && !isLoading });
 
   // Fetch current user on mount if authenticated
   useEffect(() => {
@@ -25,12 +25,16 @@ export function AppLayout() {
           setUser(user);
         } catch (error) {
           console.error('Failed to fetch user:', error);
+          // If user not found (e.g. DB was reset), clear stale auth state
+          logout();
+          return;
         }
       }
       setLoading(false);
     };
     fetchUser();
-  }, [token, isAuthenticated, setUser, setLoading]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Show loading while checking auth
   if (isLoading) {

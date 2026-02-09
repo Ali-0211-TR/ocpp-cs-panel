@@ -1,4 +1,19 @@
-import { Badge } from '@shared/ui';
+import { useState } from 'react';
+import { 
+  Badge, 
+  Button,
+  TableCell,
+  TableRow as UITableRow,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@shared/ui';
 import { 
   cn, 
   formatEnergy, 
@@ -8,8 +23,9 @@ import {
   getTransactionStatusLabel,
   getTransactionStatusColor
 } from '@shared/lib';
-import { Zap, CheckCircle2, XCircle } from 'lucide-react';
+import { Zap, CheckCircle2, XCircle, Square, AlertTriangle } from 'lucide-react';
 import type { TransactionDto } from '@shared/api';
+import { useForceStopTransaction } from '../api/queries';
 
 interface TransactionStatusBadgeProps {
   status: string;
@@ -41,9 +57,13 @@ interface TransactionRowProps {
   transaction: TransactionDto;
   onClick?: () => void;
   className?: string;
+  showForceStop?: boolean;
 }
 
-export function TransactionRow({ transaction, onClick, className }: TransactionRowProps) {
+export function TransactionRow({ transaction, onClick, className, showForceStop = true }: TransactionRowProps) {
+  const [forceStopOpen, setForceStopOpen] = useState(false);
+  const forceStop = useForceStopTransaction();
+
   const { 
     id, 
     charge_point_id, 
@@ -62,54 +82,102 @@ export function TransactionRow({ transaction, onClick, className }: TransactionR
   const end = stopped_at ? new Date(stopped_at) : new Date();
   const durationSeconds = Math.floor((end.getTime() - start.getTime()) / 1000);
 
+  const handleForceStop = () => {
+    forceStop.mutate(id, {
+      onSuccess: () => setForceStopOpen(false),
+    });
+  };
+
+  const isActive = status === 'Active';
+
+  // Table Row variant for use in tables
   return (
-    <div 
-      className={cn(
-        'flex items-center gap-4 p-3 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer',
-        className
-      )}
-      onClick={onClick}
-    >
-      {/* ID & Status */}
-      <div className="flex items-center gap-3 min-w-[180px]">
-        <span className="font-mono text-sm text-muted-foreground">#{id}</span>
+    <UITableRow className={cn('cursor-pointer hover:bg-muted/50', className)} onClick={onClick}>
+      <TableCell className="font-mono">#{id}</TableCell>
+      <TableCell>
+        <div>
+          <p className="text-sm font-medium">{charge_point_id}</p>
+        </div>
+      </TableCell>
+      <TableCell>
+        <span className="text-muted-foreground">#{connector_id}</span>
+      </TableCell>
+      <TableCell>
+        <span className="font-mono text-xs">{id_tag}</span>
+      </TableCell>
+      <TableCell>
+        <div className="text-xs">
+          <p>{formatDate(started_at)}</p>
+          {durationSeconds > 0 && (
+            <p className="text-muted-foreground">{formatDuration(durationSeconds)}</p>
+          )}
+        </div>
+      </TableCell>
+      <TableCell>
+        {stopped_at ? (
+          <div className="text-xs">
+            <p>{formatDate(stopped_at)}</p>
+          </div>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        )}
+      </TableCell>
+      <TableCell className="text-right tabular-nums">
+        {formatEnergy(energy_consumed_wh || 0)}
+      </TableCell>
+      <TableCell className="text-right tabular-nums">
+        {total_cost ? formatCurrency(total_cost, currency || 'UZS') : '—'}
+      </TableCell>
+      <TableCell>
         <TransactionStatusBadge status={status} />
-      </div>
-
-      {/* Charge Point Info */}
-      <div className="flex-1 min-w-[150px]">
-        <p className="text-sm font-medium">{charge_point_id}</p>
-        <p className="text-xs text-muted-foreground">Разъём {connector_id}</p>
-      </div>
-
-      {/* ID Tag */}
-      <div className="min-w-[120px]">
-        <p className="text-sm font-mono truncate">{id_tag}</p>
-      </div>
-
-      {/* Duration */}
-      <div className="min-w-[80px] text-right">
-        <p className="text-sm tabular-nums">{formatDuration(durationSeconds)}</p>
-      </div>
-
-      {/* Energy */}
-      <div className="min-w-[100px] text-right">
-        <p className="text-sm font-medium tabular-nums">
-          {formatEnergy(energy_consumed_wh || 0)}
-        </p>
-      </div>
-
-      {/* Cost */}
-      <div className="min-w-[100px] text-right">
-        <p className="text-sm font-medium tabular-nums">
-          {total_cost ? formatCurrency(total_cost, currency || 'UZS') : '—'}
-        </p>
-      </div>
-
-      {/* Date */}
-      <div className="min-w-[150px] text-right text-muted-foreground">
-        <p className="text-xs">{formatDate(started_at)}</p>
-      </div>
-    </div>
+      </TableCell>
+      <TableCell>
+        {showForceStop && isActive && (
+          <AlertDialog open={forceStopOpen} onOpenChange={setForceStopOpen}>
+            <AlertDialogTrigger asChild>
+              <Button 
+                variant="outline" 
+                size="sm"
+                className="text-destructive hover:text-destructive"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setForceStopOpen(true);
+                }}
+              >
+                <Square className="h-3 w-3 mr-1" />
+                Force Stop
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent onClick={(e) => e.stopPropagation()}>
+              <AlertDialogHeader>
+                <AlertDialogTitle className="flex items-center gap-2">
+                  <AlertTriangle className="h-5 w-5 text-amber-500" />
+                  Принудительная остановка транзакции
+                </AlertDialogTitle>
+                <AlertDialogDescription className="space-y-2">
+                  <p>Вы уверены, что хотите принудительно остановить транзакцию #{id}?</p>
+                  <div className="bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 rounded-md p-3 mt-2">
+                    <p className="text-amber-800 dark:text-amber-200 text-sm">
+                      <strong>⚠️ Внимание:</strong> Эта операция остановит транзакцию только в базе данных.
+                      Зарядная станция продолжит заряжать. Используйте RemoteStopTransaction для остановки через станцию.
+                    </p>
+                  </div>
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Отмена</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={handleForceStop}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  disabled={forceStop.isPending}
+                >
+                  {forceStop.isPending ? 'Остановка...' : 'Да, остановить'}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
+      </TableCell>
+    </UITableRow>
   );
 }

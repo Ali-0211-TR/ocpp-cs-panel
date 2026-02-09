@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { create } from 'zustand';
 import type { WsEvent } from '@shared/api';
 
@@ -31,5 +32,7 @@ export const useWebSocketStore = create<WebSocketState>((set) => ({
 // Selectors
 export const useWsStatus = () => useWebSocketStore((state) => state.status);
 export const useWsEvents = () => useWebSocketStore((state) => state.events);
-export const useLatestEvents = (count: number = 10) => 
-  useWebSocketStore((state) => state.events.slice(0, count));
+export const useLatestEvents = (count: number = 10) => {
+  const events = useWebSocketStore((state) => state.events);
+  return useMemo(() => events.slice(0, count), [events, count]);
+};
