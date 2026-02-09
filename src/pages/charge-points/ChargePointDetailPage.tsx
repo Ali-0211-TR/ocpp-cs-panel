@@ -1,5 +1,6 @@
+import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useChargePoint, useChargePointConnectors } from '@entities/charge-point';
+import { useChargePoint, useChargePointConnectors, useCreateConnector, useDeleteConnector } from '@entities/charge-point';
 import { useTransactions, useActiveTransactions, TransactionRow } from '@entities/transaction';
 import { PageHeader } from '@widgets/layout';
 import { ConfigurationTab, CommandsTab, ConnectorActionCard } from '@/components/charge-points';
@@ -22,6 +23,14 @@ import {
   TableHeader,
   TableRow,
   Separator,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  Label,
+  Input,
 } from '@shared/ui';
 import { CHARGE_POINT_STATUSES } from '@shared/config';
 import { formatDate } from '@shared/lib';
@@ -38,6 +47,8 @@ import {
   Plug,
   Wifi,
   WifiOff,
+  Plus,
+  Trash2,
 } from 'lucide-react';
 
 export function ChargePointDetailPage() {
@@ -57,11 +68,45 @@ export function ChargePointDetailPage() {
   const connectorsList: ConnectorDto[] = connectors || chargePoint?.connectors || [];
   const activeTransactionsList: TransactionDto[] = Array.isArray(activeTransactions) ? activeTransactions : [];
 
+  // Connector management
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [newConnectorId, setNewConnectorId] = useState('');
+  const createConnectorMutation = useCreateConnector();
+  const deleteConnectorMutation = useDeleteConnector();
+
   // Map active transactions to their connector IDs for quick lookup
   const activeTransactionByConnector = new Map<number, TransactionDto>();
   activeTransactionsList.forEach((tx) => {
     activeTransactionByConnector.set(tx.connector_id, tx);
   });
+
+  const handleAddConnector = async () => {
+    const connectorId = parseInt(newConnectorId, 10);
+    if (isNaN(connectorId) || connectorId < 1) {
+      return;
+    }
+    try {
+      await createConnectorMutation.mutateAsync({
+        chargePointId: id!,
+        connectorId,
+      });
+      setAddDialogOpen(false);
+      setNewConnectorId('');
+    } catch {
+      // Error handled by mutation / toast
+    }
+  };
+
+  const handleDeleteConnector = async (connectorId: number) => {
+    try {
+      await deleteConnectorMutation.mutateAsync({
+        chargePointId: id!,
+        connectorId,
+      });
+    } catch {
+      // Error handled by mutation / toast
+    }
+  };
 
   if (cpLoading) {
     return (
@@ -175,19 +220,30 @@ export function ChargePointDetailPage() {
 
       {/* ── Connectors — Primary section ─────────────── */}
       <div>
-        <div className="flex items-center gap-2 mb-4">
-          <Plug className="h-5 w-5 text-primary" />
-          <h2 className="text-lg font-semibold">Коннекторы</h2>
-          <Badge variant="outline" className="ml-1">
-            {connectorsList.length}
-          </Badge>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Plug className="h-5 w-5 text-primary" />
+            <h2 className="text-lg font-semibold">Коннекторы</h2>
+            <Badge variant="outline" className="ml-1">
+              {connectorsList.filter((c) => c.id > 0).length}
+            </Badge>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5"
+            onClick={() => setAddDialogOpen(true)}
+          >
+            <Plus className="h-4 w-4" />
+            Добавить
+          </Button>
         </div>
 
         {connectorsLoading ? (
           <div className="flex items-center justify-center h-32">
             <Spinner />
           </div>
-        ) : connectorsList.length === 0 ? (
+        ) : connectorsList.filter((c) => c.id > 0).length === 0 ? (
           <Card>
             <CardContent className="text-center py-12 text-muted-foreground">
               <Plug className="h-10 w-10 mx-auto mb-3 opacity-40" />
@@ -206,11 +262,52 @@ export function ChargePointDetailPage() {
                   connector={connector}
                   isOnline={chargePoint.is_online}
                   activeTransaction={activeTransactionByConnector.get(connector.id)}
+                  onDelete={handleDeleteConnector}
+                  isDeleting={deleteConnectorMutation.isPending}
                 />
               ))}
           </div>
         )}
       </div>
+
+      {/* ── Add connector dialog ─────────────────────── */}
+      <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Добавить коннектор</DialogTitle>
+            <DialogDescription>
+              Укажите номер коннектора. Обычно нумерация начинается с 1.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="connector-id">Номер коннектора</Label>
+              <Input
+                id="connector-id"
+                type="number"
+                min={1}
+                placeholder="Например: 2"
+                value={newConnectorId}
+                onChange={(e) => setNewConnectorId(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleAddConnector();
+                }}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddDialogOpen(false)}>
+              Отмена
+            </Button>
+            <Button
+              onClick={handleAddConnector}
+              disabled={createConnectorMutation.isPending || !newConnectorId}
+            >
+              {createConnectorMutation.isPending ? 'Добавление...' : 'Добавить'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Tabs ─────────────────────────────────────── */}
       <Tabs defaultValue="transactions">

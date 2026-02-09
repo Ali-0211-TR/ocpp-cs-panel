@@ -33,6 +33,12 @@ export const chargePointsApi = {
   getConnectors: (chargePointId: string) =>
     api.get<ConnectorDto[]>(`${BASE}/${chargePointId}/connectors`),
 
+  createConnector: (chargePointId: string, connectorId: number) =>
+    api.post<ConnectorDto>(`${BASE}/${chargePointId}/connectors`, { connector_id: connectorId }),
+
+  deleteConnector: (chargePointId: string, connectorId: number) =>
+    api.delete<void>(`${BASE}/${chargePointId}/connectors/${connectorId}`),
+
   // Statistics
   getStats: () => 
     api.get<ChargePointStats>(`${BASE}/stats`),

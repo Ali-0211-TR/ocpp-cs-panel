@@ -294,3 +294,39 @@ export function useDataTransfer() {
     },
   });
 }
+
+// ── Connector CRUD ─────────────────────────────────────────
+
+export function useCreateConnector() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ chargePointId, connectorId }: { chargePointId: string; connectorId: number }) =>
+      chargePointsApi.createConnector(chargePointId, connectorId),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: chargePointKeys.connectors(variables.chargePointId) });
+      queryClient.invalidateQueries({ queryKey: chargePointKeys.detail(variables.chargePointId) });
+      toast.success(`Коннектор #${variables.connectorId} добавлен`);
+    },
+    onError: (error: Error) => {
+      toast.error(`Ошибка: ${error.message}`);
+    },
+  });
+}
+
+export function useDeleteConnector() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ chargePointId, connectorId }: { chargePointId: string; connectorId: number }) =>
+      chargePointsApi.deleteConnector(chargePointId, connectorId),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: chargePointKeys.connectors(variables.chargePointId) });
+      queryClient.invalidateQueries({ queryKey: chargePointKeys.detail(variables.chargePointId) });
+      toast.success(`Коннектор #${variables.connectorId} удалён`);
+    },
+    onError: (error: Error) => {
+      toast.error(`Ошибка: ${error.message}`);
+    },
+  });
+}

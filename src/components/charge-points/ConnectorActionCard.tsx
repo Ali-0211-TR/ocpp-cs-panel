@@ -42,6 +42,7 @@ import {
   BatteryCharging,
   AlertTriangle,
   Loader2,
+  Trash2,
 } from 'lucide-react';
 import { cn, formatDate, formatDurationFromStart, formatEnergy } from '@shared/lib';
 import { toast } from 'sonner';
@@ -51,6 +52,8 @@ interface ConnectorActionCardProps {
   connector: ConnectorDto;
   isOnline: boolean;
   activeTransaction?: TransactionDto;
+  onDelete?: (connectorId: number) => void;
+  isDeleting?: boolean;
 }
 
 /**
@@ -72,9 +75,12 @@ export function ConnectorActionCard({
   connector,
   isOnline,
   activeTransaction,
+  onDelete,
+  isDeleting,
 }: ConnectorActionCardProps) {
   const [startDialogOpen, setStartDialogOpen] = useState(false);
   const [stopDialogOpen, setStopDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedIdTag, setSelectedIdTag] = useState('');
 
   const { data: idTagsData } = useIdTags({ page: 1, limit: 100 });
@@ -249,6 +255,17 @@ export function ConnectorActionCard({
               >
                 <Square className="h-3.5 w-3.5" />
                 Остановить
+              </Button>
+            )}
+            {onDelete && !isCharging && (
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                onClick={() => setDeleteDialogOpen(true)}
+                disabled={isDeleting}
+              >
+                <Trash2 className="h-4 w-4" />
               </Button>
             )}
           </div>
@@ -574,6 +591,44 @@ export function ConnectorActionCard({
                 )}
               </Button>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Delete connector dialog ──────────────── */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Удалить коннектор #{connector.id}?</DialogTitle>
+            <DialogDescription>
+              Коннектор будет удалён из списка. Если станция отправит StatusNotification для этого
+              коннектора, он будет создан заново автоматически.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
+              Отмена
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={isDeleting}
+              onClick={() => {
+                onDelete?.(connector.id);
+                setDeleteDialogOpen(false);
+              }}
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Удаление...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Удалить
+                </>
+              )}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
