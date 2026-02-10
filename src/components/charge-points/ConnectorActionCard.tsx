@@ -27,6 +27,7 @@ import {
   DialogFooter,
   Label,
   Separator,
+  Input,
 } from '@shared/ui';
 import {
   Play,
@@ -43,8 +44,11 @@ import {
   AlertTriangle,
   Loader2,
   Trash2,
+  Gauge,
+  Battery,
+  Target,
 } from 'lucide-react';
-import { cn, formatDate, formatDurationFromStart, formatEnergy } from '@shared/lib';
+import { cn, formatDate, formatDurationFromStart, formatEnergy, formatPower } from '@shared/lib';
 import { toast } from 'sonner';
 
 interface ConnectorActionCardProps {
@@ -82,6 +86,8 @@ export function ConnectorActionCard({
   const [stopDialogOpen, setStopDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedIdTag, setSelectedIdTag] = useState('');
+  const [limitType, setLimitType] = useState<string>('none');
+  const [limitValue, setLimitValue] = useState<string>('');
 
   const { data: idTagsData } = useIdTags({ page: 1, limit: 100 });
   const remoteStartMutation = useRemoteStartTransaction();
@@ -115,12 +121,26 @@ export function ConnectorActionCard({
       return;
     }
     try {
+      const data: { id_tag: string; connector_id: number; limit_type?: 'energy' | 'amount' | 'soc'; limit_value?: number } = {
+        id_tag: selectedIdTag,
+        connector_id: connector.id,
+      };
+      // Add limits if specified
+      if (limitType !== 'none' && limitValue) {
+        const numVal = parseFloat(limitValue);
+        if (!isNaN(numVal) && numVal > 0) {
+          data.limit_type = limitType as 'energy' | 'amount' | 'soc';
+          data.limit_value = numVal;
+        }
+      }
       await remoteStartMutation.mutateAsync({
         chargePointId,
-        data: { id_tag: selectedIdTag, connector_id: connector.id },
+        data,
       });
       setStartDialogOpen(false);
       setSelectedIdTag('');
+      setLimitType('none');
+      setLimitValue('');
     } catch {
       // Error handled by mutation
     }
@@ -315,7 +335,69 @@ export function ConnectorActionCard({
                       : '—'}
                   </p>
                 </div>
+                {/* Live Power */}
+                {activeTransaction!.current_power_w != null && (
+                  <div className="p-3 rounded-lg bg-amber-500/5 border border-amber-500/20 space-y-1">
+                    <div className="flex items-center gap-1.5 text-amber-600 text-xs">
+                      <Gauge className="h-3 w-3" />
+                      Мощность
+                    </div>
+                    <p className="font-bold text-lg text-amber-700">
+                      {formatPower(activeTransaction!.current_power_w)}
+                    </p>
+                  </div>
+                )}
+                {/* SoC */}
+                {activeTransaction!.current_soc != null && (
+                  <div className="p-3 rounded-lg bg-purple-500/5 border border-purple-500/20 space-y-1">
+                    <div className="flex items-center gap-1.5 text-purple-600 text-xs">
+                      <Battery className="h-3 w-3" />
+                      Заряд батареи
+                    </div>
+                    <p className="font-bold text-lg text-purple-700">
+                      {activeTransaction!.current_soc}%
+                    </p>
+                  </div>
+                )}
               </div>
+
+              {/* Charging limit progress */}
+              {activeTransaction!.limit_type && activeTransaction!.limit_value && (
+                <div className="p-3 rounded-lg bg-indigo-500/5 border border-indigo-500/20 space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-1.5 text-indigo-600">
+                      <Target className="h-3 w-3" />
+                      {activeTransaction!.limit_type === 'energy' && 'Лимит по энергии'}
+                      {activeTransaction!.limit_type === 'soc' && 'Лимит по заряду'}
+                      {activeTransaction!.limit_type === 'amount' && 'Лимит по сумме'}
+                    </div>
+                    <span className="font-semibold text-indigo-700">
+                      {activeTransaction!.limit_type === 'energy'
+                        ? `${activeTransaction!.limit_value} кВт·ч`
+                        : activeTransaction!.limit_type === 'soc'
+                        ? `${activeTransaction!.limit_value}%`
+                        : `${activeTransaction!.limit_value}`}
+                    </span>
+                  </div>
+                  {/* Progress bar */}
+                  {(() => {
+                    let progress = 0;
+                    if (activeTransaction!.limit_type === 'energy' && activeTransaction!.energy_consumed_wh != null) {
+                      progress = Math.min(100, (activeTransaction!.energy_consumed_wh / 1000 / activeTransaction!.limit_value!) * 100);
+                    } else if (activeTransaction!.limit_type === 'soc' && activeTransaction!.current_soc != null) {
+                      progress = Math.min(100, (activeTransaction!.current_soc / activeTransaction!.limit_value!) * 100);
+                    }
+                    return (
+                      <div className="w-full h-2 bg-indigo-100 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-indigo-500 rounded-full transition-all duration-500"
+                          style={{ width: `${progress}%` }}
+                        />
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
 
               {/* Session details */}
               <div className="flex items-center justify-between text-xs text-muted-foreground">
@@ -473,6 +555,46 @@ export function ConnectorActionCard({
                   )}
                 </SelectContent>
               </Select>
+            </div>
+
+            <Separator />
+
+            <div className="space-y-2">
+              <Label>Лимит зарядки (опционально)</Label>
+              <Select value={limitType} onValueChange={(v) => { setLimitType(v); if (v === 'none') setLimitValue(''); }}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Без лимита" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Без лимита</SelectItem>
+                  <SelectItem value="energy">По энергии (кВт·ч)</SelectItem>
+                  <SelectItem value="soc">По уровню заряда (%)</SelectItem>
+                  <SelectItem value="amount">По сумме</SelectItem>
+                </SelectContent>
+              </Select>
+              {limitType !== 'none' && (
+                <div className="space-y-1">
+                  <Input
+                    type="number"
+                    min="0"
+                    step={limitType === 'soc' ? '1' : '0.1'}
+                    placeholder={
+                      limitType === 'energy'
+                        ? 'Например: 10 (кВт·ч)'
+                        : limitType === 'soc'
+                        ? 'Например: 80 (%)'
+                        : 'Сумма'
+                    }
+                    value={limitValue}
+                    onChange={(e) => setLimitValue(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {limitType === 'energy' && 'Зарядка автоматически остановится при достижении указанной энергии'}
+                    {limitType === 'soc' && 'Зарядка остановится при достижении указанного % заряда батареи'}
+                    {limitType === 'amount' && 'Зарядка остановится при достижении указанной суммы'}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
           <DialogFooter>

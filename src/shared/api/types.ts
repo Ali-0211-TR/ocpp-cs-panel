@@ -104,6 +104,8 @@ export interface ResetRequest {
 export interface RemoteStartRequest {
   id_tag: string;
   connector_id?: number;
+  limit_type?: 'energy' | 'amount' | 'soc';
+  limit_value?: number;
 }
 
 export interface RemoteStopRequest {
@@ -220,6 +222,14 @@ export interface TransactionDto {
   session_fee?: number | null;
   total_cost?: number | null;
   currency?: string | null;
+  // Live meter data
+  last_meter_value?: number | null;
+  current_power_w?: number | null;
+  current_soc?: number | null;
+  last_meter_update?: string | null;
+  // Charging limits
+  limit_type?: 'energy' | 'amount' | 'soc' | null;
+  limit_value?: number | null;
 }
 
 export interface TransactionStats {
@@ -437,7 +447,10 @@ export interface MeterValuesEvent {
   charge_point_id: string;
   connector_id: number;
   transaction_id?: number;
-  values: { value: number; unit: string }[];
+  energy_wh?: number | null;
+  energy_consumed_wh?: number | null;
+  power_w?: number | null;
+  soc?: number | null;
   timestamp: string;
 }
 

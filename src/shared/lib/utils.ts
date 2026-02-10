@@ -55,6 +55,15 @@ export function formatEnergy(wh: number | null | undefined): string {
   return `${kwh.toFixed(2)} кВт·ч`;
 }
 
+// Format power from W to kW
+export function formatPower(w: number | null | undefined): string {
+  if (w === null || w === undefined) return '—';
+  if (w >= 1000) {
+    return `${(w / 1000).toFixed(1)} кВт`;
+  }
+  return `${Math.round(w)} Вт`;
+}
+
 // Format energy short (just number)
 export function formatEnergyValue(wh: number | null | undefined): string {
   if (wh === null || wh === undefined) return '0.00';

@@ -23,12 +23,14 @@ interface LiveEventsFeedProps {
 const eventIcons: Record<WsEventType, React.ElementType> = {
   charge_point_connected: Wifi,
   charge_point_disconnected: WifiOff,
+  charge_point_status_changed: Gauge,
   boot_notification: Activity,
   heartbeat_received: Activity,
   connector_status_changed: Gauge,
   transaction_started: Zap,
   transaction_stopped: ZapOff,
   meter_values: Clock,
+  meter_values_received: Clock,
   authorization_result: CheckCircle,
   error: AlertCircle,
 };

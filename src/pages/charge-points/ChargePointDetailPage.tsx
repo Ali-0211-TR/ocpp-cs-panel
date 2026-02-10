@@ -48,7 +48,6 @@ import {
   Wifi,
   WifiOff,
   Plus,
-  Trash2,
 } from 'lucide-react';
 
 export function ChargePointDetailPage() {
